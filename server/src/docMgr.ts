@@ -3,7 +3,7 @@
  */
 import mongoose from 'mongoose';
 import nodemailer from 'nodemailer';
-import { ObjectId } from 'mongodb';
+import { CollectionInfo, ObjectId } from 'mongodb';
 import { Logger } from './logger';
 import { Config } from './config';
 import { getField, throwErr } from './util';
@@ -2092,6 +2092,16 @@ export class DocMgr {
         this.collectionCount++;
         const conn = await this.getConnection();
         const rtn = conn.collection(name);
+        return rtn;
+    }
+
+    /**
+     * A funciton to get a list of all collections
+     * @returns {string[]} Array of collection names
+     */
+    public async getCollectionList(): Promise<string[]>{
+        const conn = await this.getConnection();
+        const rtn = Object.keys(conn.collections);
         return rtn;
     }
 

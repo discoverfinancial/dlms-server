@@ -18,7 +18,7 @@
 	"dependencies": {
 		"@types/node": "^17.0.30",
 		"@types/node-cron": "^3.0.1",
-		"axios": "0.28.0",
+		"axios": "^1.10.0",
 		"fs": "^0.0.1-security",
 		"node": "^17.7.2",
 		"node-cron": "^3.0.0",

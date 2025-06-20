@@ -3,6 +3,7 @@ import fs from "fs";
 import nodeCron from "node-cron";
 import crypto from 'crypto';
 import * as path from 'path';
+process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
 
 export class DocClient {
 
@@ -105,13 +106,18 @@ export class DocClient {
             console.log(`Exporting collection ${cName}`);
             const ids = idsMap[cName];
             const hashArray = [];
+            const idsLen = ids.length;
+            let idsCount = 0;
             for (const id of ids) {
+                if (idsCount % 100 == 0) {
+                    console.log(`${idsCount} of ${idsLen}`)
+                }
                 //console.log(`Exporting entry ${id}`);
                 const retryCount = 5;
                 let count = retryCount; // retry count if failed
                 while (count > 0) {
                     try {
-                        const ele = await this.sendGet(`export/${cName}/${id}`);
+                        const ele = await this.sendGet(`export/${cName}/${encodeURI(id)}`);
                         // create hash of file contents
                         const hash = getHash(ele);
                         const hashFileName = `${this.filesDir}/${hash}.json`;
@@ -124,6 +130,8 @@ export class DocClient {
 
                         count = 0;
                     } catch (e: any) {
+                        console.log("ERROR=", e);
+                        console.log("  -- id=", id, "encoded=", encodeURI(id))
                         count--;
                         if (count == 0) {
                             console.error(`ERROR: export of ${id} from collection ${cName} failed ${retryCount-count} times: ${e.message}`);
@@ -133,6 +141,7 @@ export class DocClient {
                         }
                     }
                 }
+                idsCount++;
             }
             idsHashMap[cName] = hashArray;
         }
@@ -163,10 +172,13 @@ export class DocClient {
         for (const cName of Object.keys(idsHashesMap)) {
             console.log(`Importing collection ${cName}`);
             const idWithHash = idsHashesMap[cName];
+            const idsLen = idWithHash.length;
+            let idsCount = 0;
             for (const {id,hash} of idWithHash) {
-                console.log(`Importing entry ${id}`);
+                console.log(`Importing entry ${idsCount} of ${idsLen}: ${id}`);
                 const ele = await this.readFile(`${this.filesDir}/${hash}.json`);
-                await this.sendPost(`import/${cName}/${id}`,ele);
+                await this.sendPut(`import/${cName}/${encodeURI(id)}`,ele);
+                idsCount++;
             }
         }
         console.log(`Completed import from directory '${this.dir}' to URL '${this.url}'`);
@@ -234,6 +246,11 @@ export class DocClient {
         return await this.sendAxios(path, {method: "POST", data: body});
     }
 
+    /** Axios PUT */
+    private async sendPut(path: string, body: object): Promise<any> {
+        return await this.sendAxios(path, {method: "PUT", data: body});
+    }
+
     /**
      * Handler to send (POST) and get (GET) files using axios
      * 
@@ -249,6 +266,8 @@ export class DocClient {
         opts.auth = this.auth;
         opts.maxContentLength = 200000000;
         opts.maxBodyLength = 2000000000;
+        opts.proxy = false;
+
         //console.log(`Sending ${opts.method} ${url} ...`);
         try {
            const resp = await axios(opts);

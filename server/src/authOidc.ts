@@ -12,6 +12,7 @@ import session from 'express-session';
 import { UserProfileService } from './userProfileService';
 import { throwErr } from './err';
 import Strategy = require('passport-openidconnect');
+import { DocMgr } from './docMgr';
 const log = new Logger('authOidc');
 
 /**
@@ -108,6 +109,7 @@ export function addOidcAuthMiddleware(
                 }
             )
         );
+        
     }
     passport.serializeUser((user: any, next: any) => {
         next(null, user);
@@ -124,8 +126,13 @@ export function addOidcAuthMiddleware(
             if (err) {
                 log.warn(`Failed to destroy session: ${err.stack}`);
             }
+            res.clearCookie(sessionCookieName);
+            res.clearCookie("accessToken");
             res.redirect('/');
         });
+        if (cfg.oauthEnabled) {
+            // @TODO: If logout endpoint, then call it
+        }
     });
     if (process.env.PASSPORT_DEBUG) {
         log.debug(`PASSPORT_DEBUG is set`);
@@ -152,10 +159,17 @@ export function addOidcAuthMiddleware(
                                 maxAge: 86400000,
                                 httpOnly: false,
                             });
+                            resp.cookie("accessToken", ctx.oauth?.accessToken, {
+                                maxAge: 86400000,
+                                httpOnly: false,
+                            })
                             log.debug(
                                 `Setting value of cookie ${sessionCookieName} to ${token}`
                             );
-
+                            log.debug(
+                                `Setting value of cookie accessToken to ${ctx.oauth?.accessToken}`
+                            );
+            
                             const c = req.cookies['originalUrl'];
                             const h = req.cookies['currentHash'];
                             log.debug(`Getting cookie originalUrl = ${c}`);
@@ -187,8 +201,15 @@ export function addOidcAuthMiddleware(
                     maxAge: 86400000,
                     httpOnly: false,
                 });
+                resp.cookie("accessToken", ctx.oauth?.accessToken, {
+                    maxAge: 86400000,
+                    httpOnly: false,
+                })
                 log.debug(
                     `Setting value of cookie ${sessionCookieName} to ${token}`
+                );
+                log.debug(
+                    `Setting value of cookie accessToken to ${ctx.oauth?.accessToken}`
                 );
 
                 const c = req.cookies['originalUrl'];
@@ -247,8 +268,26 @@ async function authenticate(
     if (sc) {
         try {
             const ctx: any = await jwt.verify(sc, cfg.sessionSecret);
+            // log.debug(`Session cookie was verified for ${JSON.stringify(ctx)}`);
+
+            // If cookie doesn't have user.roles, then get them & update session cookie
+            // (This happens when a remote app calls API with an Oauth access token, which doesn't go through passport.authenticate)
+            if (!ctx.user.roles.length) {
+                const dm = DocMgr.getInstance();
+                const roles = await dm.getRoles(ctx);
+                ctx.user.roles = roles;
+                log.debug(`Session cookie was missing roles, so add ${JSON.stringify(ctx)}`);
+
+                const token = jwt.sign(ctx, cfg.sessionSecret, {
+                    // expiresIn: '86400s',
+                });
+                resp.cookie(sessionCookieName, token, {
+                    maxAge: 86400000,
+                    httpOnly: false,
+                });
+                log.debug(`Setting value of cookie ${sessionCookieName} to ${token}`);
+            }
             (req as any)._ctx = ctx;
-            //log.debug(`Session cookie was verified for ${JSON.stringify(ctx)}`);
             return next();
         } catch (e) {
             log.err('Error verifying session cookie: ', e);
@@ -258,6 +297,70 @@ async function authenticate(
     }
     if (hasBasicAuthHeader(req)) {
         return await basicAuth(req, resp, next, cfg, userProfileService);
+    }
+    if (hasBearerAuthHeader(req)) {
+        console.log("HAS BEARER HEADER = TRUE");
+        try {
+            // Get Oauth authorization token
+            const accessToken: any = req.headers.authorization?.split(' ')[1];
+            console.log("authToken =", accessToken);
+
+            const introspectUrl = cfg.oauthIssuerUrl + "/v1/introspect";
+            const formData = {
+                token: accessToken,
+                token_type_hint: 'access_token'
+            }
+            const r = await fetch(introspectUrl,
+                {
+                    method: "POST",
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        Authorization: 'Basic ' + btoa(cfg.oauthClientId + ":" + cfg.oauthClientSecret),
+                    },
+                    body: new URLSearchParams(formData).toString()
+                }
+            )
+            const claims = await r.json();
+            // console.log("BEARER DATA=", claims);
+       
+            let ctx;
+            try {
+                if (!claims.active) {
+                    return resp.status(401).send('bearer token expired - reauthenticate').end();
+                }
+                const ctxs = await userProfileService.get(claims.email);
+                ctx = ctxs[0];
+            } catch (ex) {
+                log.err('Error: ', ex);
+                return resp.status(401).send('bearer token expired - reauthenticate').end();
+            }
+            ctx['oauth'] = { accessToken };
+            (req as any)._ctx = ctx;
+
+
+            log.debug(`OAuth authenticated user is`, ctx.user);
+            const token = jwt.sign(ctx, cfg.sessionSecret, {
+                expiresIn: '86400s',
+            });
+            resp.cookie(sessionCookieName, token, {
+                maxAge: 86400000,
+                httpOnly: false,
+            });
+            resp.cookie("accessToken", ctx.oauth.accessToken, {
+                maxAge: 86400000,
+                httpOnly: false,
+            })
+            log.debug(
+                `Setting value of cookie ${sessionCookieName} to ${token}`
+            );
+            log.debug(
+                `Setting value of cookie accessToken to ${ctx.oauth.accessToken}`
+            );
+
+            return next();
+        } catch (e) {
+            
+        }
     }
     log.debug(
         `Session cookie not found for ${req.path}; redirecting to /login`
@@ -333,5 +436,13 @@ function hasBasicAuthHeader(req: Request): boolean {
     return (
         req.headers.authorization != undefined &&
         req.headers.authorization.indexOf('Basic ') >= 0
+    );
+}
+
+function hasBearerAuthHeader(req: Request): boolean {
+    log.debug('hasBearerAuthHeader: headers=', req.headers);
+    return (
+        req.headers.authorization != undefined &&
+        req.headers.authorization.indexOf('Bearer ') >= 0
     );
 }

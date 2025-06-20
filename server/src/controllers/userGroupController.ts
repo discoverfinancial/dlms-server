@@ -7,7 +7,7 @@ import {
     Controller,
     Get,
     Path,
-    Post,
+    Put,
     Patch,
     Delete,
     Route,
@@ -74,7 +74,7 @@ export class UserGroupController extends Controller {
     @Response('400', 'User group with given id already exists')
     @Response('401', 'User not an admin')
     @Response('500', 'Internal Server Error.  Check database connection')
-    @Post()
+    @Put()
     public async createUserGroup(
         @Request() req: express.Request,
         @Body() body: UserGroupCreate

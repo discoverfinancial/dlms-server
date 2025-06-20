@@ -64,7 +64,7 @@ export class Server {
         app.set('json spaces', 2);
         // Add middleware
         app.use(this.logger.bind(this));
-        app.use(this.allowCrossDomain.bind(this));
+        app.use(mgr.allowCrossDomain);
         app.use(express.urlencoded({ extended: false }));
 
         app.get(
@@ -200,17 +200,6 @@ export class Server {
             );
             return res.status(code).json({ code, message });
         }
-        next();
-    }
-
-    // Cross-domain middleware
-    private allowCrossDomain(_req: Request, res: Response, next: NextFunction) {
-        res.header('Access-Control-Allow-Origin', this.cfg.corsOrigin);
-        res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH');
-        res.header('Access-Control-Allow-Headers', '*');
-        res.header('Access-Control-Expose-Headers', '*');
-        res.header('Access-Control-Allow-Credentials', 'true');
-        res.header('Access-Control-Request-Headers', '*');
         next();
     }
 

@@ -7,6 +7,7 @@ import {
     Controller,
     Get,
     Post,
+    Put,
     Path,
     Route,
     Request,
@@ -89,7 +90,7 @@ export class AdminController extends Controller {
     @Example({ id: 'id', key1: 'value1', key2: 'value2' })
     @Response('401', 'User is not an admin')
     @Response('500', 'Internal Server Error.  Check database connection')
-    @Post('import/{collection}/{id}')
+    @Put('import/{collection}/{id}')
     public async importId(
         @Request() req: express.Request,
         @Path() collection: string,

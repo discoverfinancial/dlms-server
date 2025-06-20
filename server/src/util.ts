@@ -3,6 +3,14 @@
  */
 
 /**
+ * Sleep
+ * 
+ * @param duration - The number of ms to sleep
+ * @returns 
+ */
+export const sleep = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
+
+/**
  * Returns the methods associated with any object
  *
  * @param obj Object - to get methods from

@@ -1,6 +1,6 @@
 {
     "name": "dlms-server",
-    "version": "1.0.7",
+    "version": "2.0.0",
     "description": "Document Lifecycle Management Service",
     "main": "build/src/index.js",
     "types": "build/src/index.d.ts",
@@ -40,10 +40,11 @@
         "@types/passport-local": "^1.0.38",
         "@types/passport-openidconnect": "^0.1.1",
         "@types/swagger-ui-express": "^4.1.3",
+        "@types/uuid": "^8.3.4",
         "axios": "^0.27.2",
         "connect-ensure-login": "^0.1.1",
         "cookie-parser": "^1.4.6",
-        "dlms-base": "file:dlms-base-1.0.7.tgz",
+        "dlms-base": "file:dlms-base-2.0.0.tgz",
         "express": "^4.19.1",
         "express-basic-auth": "^1.2.1",
         "express-session": "^1.18.0",
@@ -64,7 +65,9 @@
         "swagger-ui-express": "^4.3.0",
         "ts-node": "^10.7.0",
         "tsoa": "^4.1.3",
-        "typescript": "^4.6.4"
+        "typescript": "^5.7.3",
+        "uuid": "^8.3.2",
+        "lz-ts": "^1.1.2"
     },
     "devDependencies": {
         "@typescript-eslint/eslint-plugin": "^7.14.1",

@@ -8,7 +8,7 @@ import {
     Controller,
     Get,
     Path,
-    Post,
+    Put,
     Delete,
     Route,
     Request,
@@ -141,20 +141,20 @@ export class AttachmentGroupController extends Controller {
         @Path() attachmentId: string
     ): Promise<any> {
         const mgr = await DocMgr.getInstance();
-        mgr.getDoc(mgr.getCtx(req), {
-            type: collection,
-            id: docId,
-        }); // Check to make sure user has read access to doc
-        const r = await mgr.getAttachment(mgr.getCtx(req), attachmentId);
-        if (r != null) {
-            this.setHeader('Content-Type', r.type);
-            const readable = new Readable({
-                read() {
-                    this.push(r.data.buffer);
-                    this.push(null);
-                },
-            });
-            return readable;
+        try {
+            const res = req.res;
+            mgr.getDoc(mgr.getCtx(req), {
+                type: collection,
+                id: docId,
+            }); // Check to make sure user has read access to doc
+            const r = await mgr.getAttachment(mgr.getCtx(req), attachmentId);
+            if (r != null && res) {
+                res.setHeader('Content-Type', r.type);
+                res.write(r.data.buffer);
+                res.end();
+            }
+        } catch (e) {
+            log.debug(`Error getting document - returning 404: `, e);
         }
         this.setStatus(404);
     }
@@ -238,7 +238,7 @@ export class AttachmentGroupController extends Controller {
     ])
     @Response('401', 'User access denied')
     @Response('500', 'Internal Server Error.  Check database connection')
-    @Post('{collection}/{docId}/attachments/')
+    @Put('{collection}/{docId}/attachments/')
     public async createDocAttachments(
         @Request() req: express.Request,
         @Path() collection: string,

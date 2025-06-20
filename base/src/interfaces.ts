@@ -65,6 +65,21 @@ export interface AttachmentInfo {
     url: string;
 }
 
+export interface AttachmentModelCreate {
+    collection: string;
+    doc: string;
+    hash: string;
+    name: string;
+    size: number;
+    date: number;
+    type: string;
+    data: Buffer;
+}
+
+export interface AttachmentModel extends AttachmentModelCreate {
+    _id: string;
+}
+
 export interface DocCreate {
 }
 export interface DocInfo {
@@ -138,10 +153,15 @@ export interface DocState {
     
     read?: StateCallback | string[];    // Return groups who can read document in this state
     onRead?: StateActionCallback;       // Code that is run when reading the state
+    onAfterRead?: StateActionCallback;  // Code that is run after reading document, but before returning document
     
     write?: StateCallback | string[];   // Return groups who can write document in this state
     onWrite?: StateActionCallback;      // Code that is run when writing the state
-    
+
+    commentWrite?: StateCallback | string[];            // Return groups who can create comments
+    commentReadPublic?: StateCallback | string[];       // TODO: Return groups who can read public comments
+    commentReadPrivate?: StateCallback | string[];      // TODO: Return groups who can read private comments
+
     exit?: StateCallback | string[];    // Return groups who can exit this state
     onExit?: StateActionCallback;       // Code that is run when exiting the state
     
@@ -179,3 +199,40 @@ export interface PossibleStates {
     [key:string]: NextState;
 }
 
+
+
+export interface CommentHistory {
+    date: number;
+    user: Person;
+}
+
+export interface CommentInfo {
+    id: string;
+    date: number;
+    user: Person;
+    topic: string;
+    text: string;
+    edited?: CommentHistory[];
+    approved?: string;
+    private?: boolean;
+}
+
+export interface CommentCreate {
+    topic: string;
+    text: string;
+    private?: boolean;
+    approved?: string;
+}
+
+export  interface CommentUpdate {
+    topic?: string;
+    text?: string;
+    private?: boolean;
+    approved?: string;
+}
+
+export interface StateHistory {
+    state: string;
+    date: number;
+    email?: string;
+}

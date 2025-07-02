@@ -556,14 +556,11 @@ export class DocMgr {
                 )
             );
         }
-        if (!projection) {
-            return doc;
-        }
-        const r = await this._getDoc(ctx, ds, projection);
+        const r = (!projection) ? doc : await this._getDoc(ctx, ds, projection);
 
         // Include only those comments the user can view
         const docType = this.getDocType(ds.type);
-        if (docType.includeComments) {
+        if (docType.includeComments && r.comments) {
             const comments = [];
             for (var c of r.comments) {
                 if (await this.canViewComment(ctx, ds, c)) {
@@ -571,6 +568,10 @@ export class DocMgr {
                 }
             }
             r.comments = comments;
+        }
+        else {
+            // If comments are not included, then remove comments from the document
+            delete r.comments;
         }
         
         // Allow document to be modified before returning

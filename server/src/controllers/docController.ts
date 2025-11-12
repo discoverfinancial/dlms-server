@@ -91,7 +91,7 @@ export class DocController extends Controller {
      * @param req
      * @param type DocType name
      * @param body PostDocs 
-     * @returns DocList object
+     * @returns DocList object or iterator id
      */
         @Example<object>({ stream: true, params: {match: 'query', projection: 'projection' }})
         @Response('401', 'User access denied')
@@ -121,7 +121,13 @@ export class DocController extends Controller {
             const stream = body.stream;
             console.log("match=", match, "options=", options, "stream=", stream)
             if (stream) {
-              await mgr.getDocs(mgr.getCtx(req), type, match, options, stream, res);
+                if (stream === "iterator") {
+                    const iteratorId = await mgr.getDocs(mgr.getCtx(req), type, match, options, stream);
+                    res.write(iteratorId);
+                    res.end();
+                    return;
+                }
+                await mgr.getDocs(mgr.getCtx(req), type, match, options, stream, res);
             }
             else {
               const result = await mgr.getDocs(mgr.getCtx(req), type, match, options);
@@ -151,7 +157,7 @@ export class DocController extends Controller {
      * @param type DocType name
      * @param match Optional, stringified JSON, specifies selection filter using query operators.
      * @param options Optional, stringified JSON, specifies the query options (projection, sort, limit).
-     * @returns DocList object
+     * @returns DocList object or iterator id
      */
     @Example<DocList>({
         count: 3,
@@ -169,18 +175,20 @@ export class DocController extends Controller {
         @Request() req: express.Request,
         @Path() type: string,
         @Query() match?: string,
-        @Query() options?: string
+        @Query() options?: string,
+        @Query() stream?: string,
     ): Promise<any> {
         const mgr = DocMgr.getInstance();
         const dt = mgr.getDocType(type);
         if (dt.validate?.getDocs) {
-            dt.validate.getDocs(type, match, options);
+            dt.validate.getDocs(type, match, options, stream);
         }
         const result = await mgr.getDocs(
             mgr.getCtx(req),
             type,
             match,
-            options
+            options,
+            stream
         );
         const rtn: any = {
             count: result.length,
@@ -390,4 +398,20 @@ export class DocController extends Controller {
       return mgr.deleteComment(mgr.getCtx(req), { type, id }, cid);
     }
   
+}
+
+@Route('/api/iterator}')
+export class IteratorController extends Controller {
+    @Get("{id}")
+    public async getNextDoc(
+        @Request() req: express.Request, 
+        @Path() id: string, 
+        @Query() count?: number,
+    ): Promise<any> {
+      console.log(`getNextDoc(${id}, ${count})`);
+      const mgr = DocMgr.getInstance();
+      const r = await mgr.getNextDoc(mgr.getCtx(req), id, count);
+      return r;
+    }
+
 }

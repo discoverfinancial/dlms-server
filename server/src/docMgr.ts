@@ -98,7 +98,7 @@ export interface Validate {
     createDoc?: (type: string, body: any) => any;
     createDocById?: (type: string, id: string, body: any) => any;
     postDocs?: (type: string, body: any) => any;
-    getDocs?: (type: string, match: any, options: any) => any;
+    getDocs?: (type: string, match: any, options: any, stream?: string) => any;
     getDoc?: (type: string, id: string) => any;
     updateDoc?: (type: string, id: string, args: any) => any;
     deleteMany?: (type: string, match: any, preview?: boolean) => any;
@@ -188,6 +188,7 @@ export class DocMgr {
     protected userProfileService: UserProfileService;
     protected enableUtf8Validation = false;
     protected drainTimeout = parseInt(""+process.env["DRAIN_TIMEOUT"]) || 60000;
+    protected iteratorCache: { [id: string]: any } = {};
 
     /**
      * Constructor for creating a new DocMgr instance.
@@ -760,7 +761,9 @@ export class DocMgr {
      * @param {string} type - The type of document.
      * @param {any} match - The matching criteria for document retrieval.
      * @param {any} options - The options for document retrieval.
+     * @param {string} streamOrIterator - [Optional] If set to "stream" or "compress", then stream results to response.  If set to "iterator", then return an iterator id.
      * @param {any} response - [Optional] If set, then this is the response object to stream response to.
+     * @param {function} processDoc - [Optional] Function to process each document before returning/streaming it.
      * @returns {Promise<any[]>} If not streaming, then return an array of retrieved documents.
      */
     public async getDocs(
@@ -768,10 +771,11 @@ export class DocMgr {
         type: string, 
         match?: any, 
         options?: any, 
-        stream?: string,
+        streamOrIterator?: string,
         response?: any,
-    ): Promise<any[]> {
-        log.debug("getDocs: type=", type, "typeof=", (typeof match), " match=", match, " options=", options, " stream=", stream);
+        processDoc?: (doc: any) => Promise<any>
+    ): Promise<any> {
+        log.debug("getDocs: type=", type, "typeof=", (typeof match), " match=", match, " options=", options, " streamOrIterator=", streamOrIterator, " response=", response, " typeof response=", (typeof response));
         const pc = await this.getDocCollection(type);
         if (typeof match === 'string') {
             match = JSON.parse(match);
@@ -894,8 +898,22 @@ export class DocMgr {
             const _docs = await pc.aggregate(_match.aggregate, { enableUtf8Validation: this.enableUtf8Validation, allowDiskUse: true });
             log.debug(`Time for ${type} aggregate query = ${((Date.now() - start)/1000)} seconds`);
             const start2 = Date.now();
-            if (stream && response) {
-                const count = await this.streamAggregateResults(type, _docs, stream, response, false);
+            if (streamOrIterator === "iterator") {
+                const iteratorId = uuidv4();
+                this.iteratorCache[iteratorId] = {
+                    results: "aggregate",
+                    cursor: _docs,
+                    type: type,
+                    original_projection: original_projection,
+                    removeId: removeId,
+                    processDoc: processDoc,
+                    dateCreated: Date.now(),
+                };
+                log.debug(`Created iterator id=${iteratorId} for aggregate results`);
+                return iteratorId;
+            }
+            else if (streamOrIterator && response) {
+                const count = await this.streamAggregateResults(type, _docs, streamOrIterator, response, false);
                 log.debug(`Time to send ${type} aggregate results = ${((Date.now() - start2)/1000)} seconds`);
                 log.debug(`${type} aggregate results length = ${count}`);
                 return [];
@@ -926,8 +944,22 @@ export class DocMgr {
         const _docs = await pc.find(_match, { ...options, enableUtf8Validation: this.enableUtf8Validation, allowDiskUse: true });
         log.debug(`Time for ${type} query = ${((Date.now() - start)/1000)} seconds`);
         const start2 = Date.now();
-        if (stream && response) {
-            const count = await this.streamQueryResults(ctx, type, _docs, stream, response, original_projection, removeId);
+        if (streamOrIterator === "iterator") {
+            const iteratorId = uuidv4();
+            this.iteratorCache[iteratorId] = {
+                results: "query",
+                cursor: _docs,
+                type: type,
+                original_projection: original_projection,
+                removeId: removeId,
+                processDoc: processDoc,
+                dateCreated: Date.now(),
+            };
+            log.debug(`Created iterator id=${iteratorId} for query results`);
+            return iteratorId;
+        }
+        else if (streamOrIterator && response) {
+            const count = await this.streamQueryResults(ctx, type, _docs, streamOrIterator, response, original_projection, removeId);
             log.debug(`Time for ${type} query toArray = ${((Date.now() - start2)/1000)} seconds`);
             log.debug(`Searched for ${type} match with ${JSON.stringify(_match)} and found ${count} documents`);
             return [];
@@ -984,6 +1016,203 @@ export class DocMgr {
         return rtn;
     }
 
+    /**
+     * Gets the current iterators in the iterator cache.
+     * 
+     * @returns The current iterators in the iterator cache.
+     */
+    public getIterators() {
+        return this.iteratorCache;
+    }
+
+    /**
+     * Gets the next count number of documents from a streaming iterator.
+     * Returns count documents, less if count documents are not available, or null if no more documents.
+     * 
+     * @param ctx The user context
+     * @param iteratorId The iterator id
+     * @param count Optional number of documents to return (default is 1)
+     * @returns The next documents from the iterator or null if no more documents
+     */
+    public async getNextDoc(ctx: UserContext, iteratorId: string, count?: number) {
+        const numDocs = count || 1;
+
+        if (numDocs == 1) {
+            return await this._getNextDoc(ctx, iteratorId);
+        }
+
+        const docs: any[] = [];
+        for (let i = 0; i < numDocs; i++) {
+            const doc = await this._getNextDoc(ctx, iteratorId);
+            if (doc) {
+                docs.push(doc);
+            }
+            else {
+                break;
+            }
+        }
+        if (docs.length == 0) {
+            return null;
+        }
+        return docs;
+    }
+
+    /**
+     * Gets the next document from a streaming iterator.
+     * 
+     * @param ctx The user context
+     * @param iteratorId The iterator id
+     * @param count Optional number of documents to return (default is 1)
+     * @returns The next documents from the iterator or null if no more documents
+     */
+    protected async _getNextDoc(ctx: UserContext, iteratorId: string) {
+        // log.debug(`Streaming results for iterator id=${iteratorId}...`);
+        const iterator = this.iteratorCache[iteratorId];
+        if (!iterator) {
+            return null;
+        }
+        const results = iterator.results;
+        const cursor = iterator.cursor;
+        const type = iterator.type;
+        const original_projection = iterator.original_projection;
+        const removeId = iterator.removeId;
+        const processDoc = iterator.processDoc;
+
+        // If streaming query results
+        if (results == "query") {
+            const docType = type ? this.getDocType(type) : null;
+            const hasNext = await cursor.hasNext();
+            if (!hasNext) {
+                delete this.iteratorCache[iteratorId];
+                log.debug(`Done streaming query results for iterator id=${iteratorId}`);
+                return null;
+            }
+            let doc = await cursor.next();
+            if (doc) {
+
+                if (removeId) {
+                    delete doc.id;
+                    delete doc._id;
+                    ctx.docId = undefined;
+                }
+                else {
+                    doc = this.toInfo(doc, false);
+                    ctx.docId = doc.id;
+                }
+                ctx.mode = 'read';
+                try {
+    
+                    let allowAccess = true;
+                    
+                    // Enforce read ACLs
+                    if (type && docType && !docType.globalReadAccess) {
+                        allowAccess = await this.hasReadAccess(ctx, type, doc);
+                    }
+                    
+                    if (allowAccess) {
+                        if (type && docType?.toSummary) {
+                            doc = docType.toSummary(type, doc, original_projection, false);
+                        }
+                        else {
+                            doc = this.toGenericSummary(type, doc, original_projection, false);
+                        }
+    
+                        if (type && doc.state) {
+                            const docState = await this.getDocState(ctx, type, doc.state);
+                            if (docState.onRead) {
+                                await docState.onRead(
+                                    new StateCallbackContextImpl(ctx, this, type, this.toInfo(doc, true))
+                                );
+                            }
+                        }
+
+                        if (processDoc) {
+                            doc = await processDoc(doc);
+                        }
+
+                        return doc
+                    }
+                } catch (e) {
+                    log.debug('Error getting doc: ', e);
+                    return throwErr(400, `Error getting doc from iterator=${e}`);
+                }
+            }
+
+        }
+
+        // If streaming aggregate results
+        else {
+
+            const docType = type ? this.getDocType(type) : null;
+            const hasNext = await cursor.hasNext();
+            if (!hasNext) {
+                delete this.iteratorCache[iteratorId];
+                log.debug(`Done streaming aggregate results for iterator id=${iteratorId}`);
+                return null;
+            }
+            let doc = await cursor.next();
+            if (doc) {
+
+                if (removeId) {
+                    delete doc.id;
+                    delete doc._id;
+                    ctx.docId = undefined;
+                }
+                else {
+                    doc = this.toInfo(doc, false);
+                    ctx.docId = doc.id;
+                }
+                ctx.mode = 'read';
+                try {
+    
+                    let allowAccess = true;
+                    
+                    // Enforce read ACLs
+                    if (type && docType && !docType.globalReadAccess) {
+                        allowAccess = await this.hasReadAccess(ctx, type, doc);
+                    }
+                    
+                    if (allowAccess) {
+                        if (type && docType?.toSummary) {
+                            doc = docType.toSummary(type, doc, original_projection, false);
+                        }
+                        else {
+                            doc = this.toGenericSummary(type, doc, original_projection, false);
+                        }
+    
+                        if (type && doc.state) {
+                            const docState = await this.getDocState(ctx, type, doc.state);
+                            if (docState.onRead) {
+                                await docState.onRead(
+                                    new StateCallbackContextImpl(ctx, this, type, this.toInfo(doc, true))
+                                );
+                            }
+                        }
+
+                        if (processDoc) {
+                            doc = await processDoc(doc);
+                        }
+                        return doc;
+                    }        
+                } catch (e) {
+                    log.debug('Error getting doc: ', e);
+                    return throwErr(400, `Error getting doc from iterator=${e}`);
+                }
+            }
+        }
+    }
+
+    /**
+     * Stream aggregate results to response.
+     * 
+     * @param type The document type
+     * @param cursor The mongo cursor
+     * @param stream The stream type ("stream" or "compress")
+     * @param response The response object
+     * @param removeId True to remove id from documents
+     * @param processDoc Optional function to process each document before returning
+     * @returns Document count
+     */
     public async streamAggregateResults(type: string | null, cursor: any, stream: string, response: any, removeId: boolean, processDoc?: any) {
         log.debug(`Streaming ${type || ""} aggregate results...`);
         const doCompression = ("compress" == stream)
@@ -1044,6 +1273,19 @@ export class DocMgr {
         return count;
     }
 
+    /**
+     * Stream query results to response.
+     * 
+     * @param ctx The user context
+     * @param type The document type
+     * @param cursor The mongo cursor
+     * @param stream The stream type ("stream" or "compress")
+     * @param response The response object
+     * @param original_projection The original projection
+     * @param removeId True to remove id from documents
+     * @param processDoc Optional function to process each document before returning
+     * @returns Document count
+     */
     public async streamQueryResults(ctx:any, type: string | null, cursor: any, stream: string, response: any, original_projection: any, removeId: boolean, processDoc?: any) {
         log.debug(`Streaming ${type} query results...`);
         const doCompression = ("compress" == stream)

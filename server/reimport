@@ -7,5 +7,5 @@ npm run build
 popd
 
 # Install modules
-cp ../base/dlms-base-2.0.0.tgz .
-npm install dlms-base-2.0.0.tgz
+cp ../base/dlms-base-2.0.1.tgz .
+npm install dlms-base-2.0.1.tgz

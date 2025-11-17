@@ -126,6 +126,31 @@ export async function loginUser(
         return ctxs[0];
     }
 
+    // Get API keys from the environment variable.
+    // Format is "key:role:appName" such as "12345678:Editor:DLMS App,876543:Admin:Demo App"
+    const apiKeys = process.env['API_KEYS'];
+
+    // If there are API keys and the password matches one of the API keys, get the user context for the user.
+    if (apiKeys) {
+        const keys = apiKeys.split(",");
+        for (const key of keys) {
+            const parts = key.split(":");
+            if (parts.length == 3) {
+                if (pwd === parts[0]) {
+                    const app = parts?.[2];
+                    const ctxs = await userProfileService.get(uid);
+                    const ctx = ctxs[0];
+            
+                    // User must have the specified role
+                    if (ctx.user.roles.includes(parts[1])) {
+                        log.debug('loginUser matches API_KEYS for app '+app+' and role '+parts[1]+', so just get context for user');
+                        return ctx;
+                    }
+                }
+            }
+        }
+    }
+
     // If the user id and password have been passed, verify the user.
     log.debug('loginUser has been passed uid & pwd, so verify user');
     const ctx = await userProfileService.verify(uid, pwd);

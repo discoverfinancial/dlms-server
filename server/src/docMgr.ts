@@ -89,7 +89,9 @@ export interface DocType {
     onPostCreate?: (docMgr: DocMgr, ctx: UserContext, type: string, doc: any) => Promise<any>; // Modify document after created
     extraCreateArgs?: any;                      // Additional properties to add to create
     onUpdate?: (docMgr: DocMgr, ctx: UserContext, ds: DocSpec, doc: any) => Promise<any>; // Modify document during update
-    onAfterUpdate?: (docMgr: DocMgr, ctx: UserContext, type: string, doc: any) => Promise<any>; // Modify document after update
+    onPostUpdate?: (docMgr: DocMgr, ctx: UserContext, type: string, doc: any) => Promise<any>; // Modify document after update
+    onDelete?: (docMgr: DocMgr, ctx: UserContext, type: string, doc: any) => Promise<any>; // Modify document before delete
+    onPostDelete?: (docMgr: DocMgr, ctx: UserContext, type: string, doc: any) => Promise<any>; // Run code after delete
     globalReadAccess?: boolean;                 // No need to check access permission for read of this document type since all users can read (this improves performance)
     validate?: Validate;                        // Validate methods for rest API parameters and method parameters
 }
@@ -1862,7 +1864,15 @@ export class DocMgr {
         const newArgs = await this.updateArgs(ctx, ds, args);
         await pc.updateOne(this.idFilter(ds.id), this.toMongoUpdate(newArgs));
 
-        const updatedDoc = await this._getDoc(ctx, ds);
+        let updatedDoc = await this._getDoc(ctx, ds);
+
+         // If onPostUpdate method, then allow doc to be updated
+        if (docType.onPostUpdate) {
+            const r = await docType.onPostUpdate(this, ctx, ds.type, this.toInfo(updatedDoc, true));
+            if (r) {
+                updatedDoc = r;
+            }
+        }
 
         // Email comments
         if (docType.includeComments) {
@@ -1884,14 +1894,24 @@ export class DocMgr {
         log.debug(`Deleting doc: ${JSON.stringify(ds)}`);
         ctx.docId = ds.id;
         ctx.mode = 'delete';
-        const doc = await this._getDoc(ctx, ds);
+        let doc = await this._getDoc(ctx, ds);
         const docState = await this.getDocState(ctx, ds.type, doc.state);
         if (docState.delete) {
             await this.assertDeleteAccess(ctx, ds.type, doc);
         } else {
             await this.assertWriteAccess(ctx, ds.type, doc);
         }
+        const docType = this.getDocType(ds.type);
 
+        // If onDelete method, then allow doc to be modified before deletion
+        if (docType.onDelete) {
+            const r = await docType.onDelete(this, ctx, ds.type, this.toInfo(doc, true));
+            if (r) {
+                doc = r;
+            }
+        }
+
+        // If onDelete method in state, then call it
         if (docState.onDelete) {
             await docState.onDelete(
                 new StateCallbackContextImpl(
@@ -1910,6 +1930,15 @@ export class DocMgr {
         const pc = await this.getDocCollection(ds.type);
         await pc.deleteOne(this.idFilter(ds.id));
         log.debug(`Deleted doc: ${JSON.stringify(ds)}`);
+
+         // If onPostDelete method, then allow doc to be updated
+        if (docType.onPostDelete) {
+            const r = await docType.onPostDelete(this, ctx, ds.type, this.toInfo(doc, true));
+            if (r) {
+                return r;
+            }
+        }
+       
         return doc;
     }
 

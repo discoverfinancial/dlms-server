@@ -1,0 +1,29 @@
+{
+	"name": "backup",
+	"version": "1.0.0",
+	"description": "Document client",
+	"scripts": {
+		"build": "npm install && tsc",
+		"debug": "ts-node main.ts scheduleBackup",
+		"start": "node build/main.js scheduleBackup",
+		"backup": "ts-node main.ts runBackupDaemon",
+		"import": "ts-node main.ts import $FROM_DIR $URL merge",
+		"import-reset": "ts-node main.ts import $FROM_DIR $URL reset",
+		"delete": "ts-node main.ts delete $BACKUP_DIR",
+		"run": "ts-node main.ts $P1 $P2 $P3"
+	},
+	"author": "",
+	"license": "MIT",
+	"homepage": ".",
+	"dependencies": {
+		"@types/node": "^17.0.30",
+		"@types/node-cron": "^3.0.1",
+		"axios": "^1.10.0",
+		"fs": "^0.0.1-security",
+		"node": "^17.7.2",
+		"node-cron": "^3.0.0",
+		"ts-node": "^10.7.0",
+		"tsoa": "^3.14.1",
+		"typescript": "^4.6.2"
+	}
+}

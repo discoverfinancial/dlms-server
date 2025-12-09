@@ -1,0 +1,11 @@
+node_modules
+build
+env
+//*.tgz
+.DS_Store
+.vscode
+*-bak
+*-copy
+*-orig
+routes.ts
+package-lock.json

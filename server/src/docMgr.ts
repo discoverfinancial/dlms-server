@@ -3376,7 +3376,6 @@ export class DocMgr {
             log.info('Connecting to database ...');
             const opts = {
                 serverSelectionTimeoutMS: 10000,
-                useUnifiedTopology: true,
             };
             try {
                 await mongoose.connect(this.mongoUrl, opts);

@@ -777,7 +777,7 @@ export class DocMgr {
         response?: any,
         processDoc?: (doc: any) => Promise<any>
     ): Promise<any> {
-        log.debug("getDocs: type=", type, "typeof=", (typeof match), " match=", match, " options=", options, " streamOrIterator=", streamOrIterator, " response=", response, " typeof response=", (typeof response));
+        log.debug("getDocs: type=", type, "typeof=", (typeof match), " match=", match, " options=", options, " streamOrIterator=", streamOrIterator, " typeof response=", (typeof response));
         const pc = await this.getDocCollection(type);
         if (typeof match === 'string') {
             match = JSON.parse(match);

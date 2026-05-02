@@ -27,6 +27,9 @@
         "Bryce Curtis <BryceCurtis@discover.com>"
     ],
     "license": "MIT",
+    "overrides": {
+        "express": "^5.2.1"
+    },
     "dependencies": {
         "@types/connect-ensure-login": "^0.1.9",
         "@types/cookie-parser": "^1.4.10",

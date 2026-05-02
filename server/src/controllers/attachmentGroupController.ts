@@ -150,6 +150,9 @@ export class AttachmentGroupController extends Controller {
             const r = await mgr.getAttachment(mgr.getCtx(req), attachmentId);
             if (r != null && res) {
                 res.setHeader('Content-Type', r.type);
+                if (r.name) {
+                    res.setHeader('Content-Disposition', `attachment; filename="${r.name}"`);
+                }                
                 res.write(r.data.buffer);
                 res.end();
             }

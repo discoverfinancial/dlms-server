@@ -811,13 +811,25 @@ export class DocMgr {
                 const matchOr = _match['$or'];
                 for (let i = 0; i < matchOr.length; i++) {
                     if (matchOr[i]._id) {
-                        matchOr[i]._id = new ObjectId(matchOr[i]._id);
+                        matchOr[i]._id = this.idFilter(matchOr[i]._id)._id;
+                    }
+                    else if (matchOr[i].id) {
+                        matchOr[i]._id = this.idFilter(matchOr[i].id)._id;
+                        delete matchOr[i].id;
+
                     }
                 }
                 _match['$or'] = matchOr;
             }
+            else if (_match._id) {
+                _match._id = this.idFilter(_match._id)._id;
+            }
+            else if (_match.id) {
+                _match._id = this.idFilter(_match.id)._id;
+                delete _match.id;
+            }
         } catch (e) {
-            log.debug('Error processing match[$or]:', e);
+            log.debug('Error processing match[$or] or match[id]:', e);
         }
 
         if (!options) {

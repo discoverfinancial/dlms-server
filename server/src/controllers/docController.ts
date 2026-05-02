@@ -399,7 +399,7 @@ export class DocController extends Controller {
   
 }
 
-@Route('/api/iterator}')
+@Route('/api/iterator')
 export class IteratorController extends Controller {
     @Get("{id}")
     public async getNextDoc(

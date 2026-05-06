@@ -4,6 +4,7 @@
 import crypto = require('crypto');
 
 export class Config {
+    public readonly hostname: string;    
     public readonly port: string;
     public readonly baseUrl: string;
     public readonly oauthClientId: string;
@@ -22,6 +23,7 @@ export class Config {
 
     constructor() {
         this.port = process.env.PORT || '3000';
+        this.hostname = this.getStr('HOST_NAME', '127.0.0.1');       
         this.baseUrl = this.getStr('BASE_URL', 'http://localhost:' + this.port);
         this.debug = this.getBool('DEBUG', true);
         this.corsOrigin = this.getStr('CORS_ORIGIN', '*');

@@ -112,7 +112,8 @@ export class Server {
         }
         app.use(this.handleError.bind(this));
         const port = parseInt(this.cfg.port);
-        app.listen(port, () => {
+        const hostname = this.cfg.hostname;
+        app.listen(port, hostname, () => {
             this.log.info(`Listening on port ${port}`);
         });
     }

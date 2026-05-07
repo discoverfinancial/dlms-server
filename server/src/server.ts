@@ -66,6 +66,7 @@ export class Server {
         app.use(this.logger.bind(this));
         app.use(mgr.allowCrossDomain);
         app.use(express.urlencoded({ extended: false }));
+        app.use(express.json())
 
         app.get(
             '/health',

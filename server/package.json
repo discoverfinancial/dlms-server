@@ -46,7 +46,7 @@
         "@types/passport-openidconnect": "^0.1.1",
         "@types/swagger-ui-express": "^4.1.3",
         "@types/uuid": "^11.0.0",
-        "axios": "^1.13.2",
+        "axios": "^1.16.0",
         "connect-ensure-login": "^0.1.1",
         "cookie-parser": "^1.4.6",
         "dlms-base": "file:dlms-base-2.0.2.tgz",
